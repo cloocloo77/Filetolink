@@ -1,49 +1,313 @@
-# FileToLink — Telegram File Sharing via FastAPI
+# 🚀 FileToLink — Telegram File Sharing via FastAPI
 
-A production-ready Telegram bot + FastAPI service that turns Telegram uploads into temporary download and streaming links.
+<p align="center">
+  <a href="https://www.python.org/downloads/release/python-3110/"><img alt="Python 3.11" src="https://img.shields.io/badge/Python-3.11-blue.svg"></a>
+  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Production-009688.svg"></a>
+  <a href="https://docs.docker.com/compose/"><img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg"></a>
+</p>
 
----
-
-## 1) What this project does
-
-When a user uploads a file to your bot:
-
-1. The bot receives metadata (`file_id`, `file_unique_id`, name, size, mime).
-2. The app stores only metadata in your database.
-3. The API serves file bytes directly from Telegram using MTProto when users open generated links.
-
-This means:
-- ✅ No long-term local file storage required.
-- ✅ Works well on stateless/ephemeral hosts.
-- ✅ Supports range requests for media players.
+Turn Telegram uploads into secure **download** and **streaming** links with a bot + API stack built for production.
 
 ---
 
-## 2) Core features
+## 📌 Table of Contents
 
-- Telegram ingestion using **Pyrogram**.
-- Download links: `GET /d/{token}`.
-- Streaming links: `GET /s/{token}`.
-- HTTP range support (`206 Partial Content`).
-- Configurable max upload size (`MAX_FILE_SIZE`, default 2GB).
-- Token-based linking.
-- Auto-expiry with periodic DB cleanup.
-- Deduplication by `file_unique_id`.
-- Docker + systemd + Nginx deployment examples.
-
----
-
-## 3) Tech stack
-
-- **Python 3.11**
-- **FastAPI** + **Uvicorn**
-- **Pyrogram** (+ tgcrypto)
-- **SQLAlchemy 2 async**
-- **SQLite/aiosqlite** by default (Postgres recommended in production)
+- [What this project does](#-what-this-project-does)
+- [Features](#-features)
+- [How it works](#-how-it-works)
+- [Architecture](#-architecture)
+- [Quick Start (Beginner Friendly)](#-quick-start-beginner-friendly)
+- [Environment variables](#-environment-variables)
+- [Deployment](#-deployment)
+  - [Docker deployment (easiest)](#1-docker-deployment-easiest)
+  - [VPS + systemd + Nginx deployment](#2-vps--systemd--nginx-deployment)
+- [API reference](#-api-reference)
+- [Operations guide](#-operations-guide)
+- [Troubleshooting](#-troubleshooting)
+- [Project structure](#-project-structure)
+- [Roadmap ideas](#-roadmap-ideas)
+- [License](#-license)
 
 ---
 
-## 4) Repository structure
+## ✨ What this project does
+
+When a user sends a file to your Telegram bot:
+
+1. The bot receives Telegram metadata (`file_id`, `file_unique_id`, filename, size, mime).
+2. The app stores **only metadata** in your database.
+3. File bytes are served on demand from Telegram (MTProto) via HTTP endpoints.
+
+✅ You avoid long-term local file storage.  
+✅ You get expiring links for safer sharing.  
+✅ You support range requests for media players.
+
+---
+
+## ✅ Features
+
+- Telegram ingestion via **Pyrogram**
+- Download links: `GET /d/{token}`
+- Streaming links: `GET /s/{token}`
+- HTTP Range support (`206 Partial Content`)
+- Configurable max upload size (`MAX_FILE_SIZE`, default 2GB)
+- Token-based file access
+- Automatic link expiry + periodic DB cleanup
+- Deduplication by `file_unique_id`
+- Deploy options for Docker and systemd + Nginx
+
+---
+
+## ⚙️ How it works
+
+```mermaid
+flowchart LR
+  A[Telegram user uploads file] --> B[Bot handler stores file metadata]
+  B --> C[(Database)]
+  B --> D[Token generated]
+  D --> E[User receives share link]
+  E --> F[Client opens /d/token or /s/token]
+  F --> G[API fetches file bytes from Telegram]
+  G --> H[Client download/stream]
+```
+
+---
+
+## 🧱 Architecture
+
+- **Backend**: FastAPI + Uvicorn
+- **Bot**: Pyrogram + tgcrypto
+- **Database**: SQLAlchemy async (SQLite by default, PostgreSQL recommended in production)
+- **Runtime**: Python 3.11
+- **Proxy (optional but recommended)**: Nginx
+
+---
+
+## 🏁 Quick Start (Beginner Friendly)
+
+If you only want to test locally first, follow these exact steps.
+
+### 1) Clone and enter project
+
+```bash
+git clone <your-repo-url>
+cd Filetolink
+```
+
+### 2) Create virtual environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3) Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4) Create env file
+
+```bash
+cp .env.example .env
+```
+
+Now edit `.env` and set:
+- `BOT_TOKEN`
+- `API_ID`
+- `API_HASH`
+- `BASE_URL` (for local testing use `http://127.0.0.1:8000`)
+
+### 5) Run server
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### 6) Health check
+
+```bash
+curl -i http://127.0.0.1:8000/health
+```
+
+Expected: `HTTP/1.1 200 OK`
+
+---
+
+## 🔐 Environment variables
+
+Copy `.env.example` to `.env` and set values.
+
+| Variable | Required | Description |
+|---|---:|---|
+| `BOT_TOKEN` | Yes | Telegram bot token from BotFather |
+| `API_ID` | Yes | Telegram API ID |
+| `API_HASH` | Yes | Telegram API hash |
+| `BASE_URL` | Yes | Public base URL, e.g. `https://files.example.com` |
+| `PORT` | No | App port (default: `8000`) |
+| `DATABASE_URL` | No | SQLAlchemy async URL (default uses local SQLite file) |
+| `FILE_EXPIRY_HOURS` | No | Link lifetime in hours (default: `24`) |
+| `MAX_FILE_SIZE` | No | Max upload bytes (default: `2147483648`) |
+| `OWNER_ID` | No | Optional Telegram owner user ID |
+| `FORCE_DOWNLOAD` | No | If `true`, uses `Content-Disposition: attachment` |
+
+---
+
+## 🚢 Deployment
+
+## 1) Docker deployment (easiest)
+
+Best option for beginners who want minimal server setup.
+
+### Steps
+
+1. Prepare `.env`:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+2. Start app:
+   ```bash
+   docker compose up --build -d
+   ```
+3. Check logs:
+   ```bash
+   docker compose logs -f filetolink
+   ```
+4. Verify health:
+   ```bash
+   curl -i http://127.0.0.1:8000/health
+   ```
+
+### Update flow
+
+```bash
+git pull
+docker compose up --build -d
+docker image prune -f
+```
+
+---
+
+## 2) VPS + systemd + Nginx deployment
+
+Use this for long-running production servers.
+
+### A. Install dependencies
+
+```bash
+sudo apt update
+sudo apt install -y python3.11-venv python3-pip nginx git
+```
+
+### B. Deploy app
+
+```bash
+sudo mkdir -p /opt/filetolink
+sudo chown -R $USER:$USER /opt/filetolink
+git clone <your-repo-url> /opt/filetolink
+cd /opt/filetolink
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+nano .env
+```
+
+### C. Install systemd service
+
+```bash
+sudo cp deploy/filetolink.service /etc/systemd/system/filetolink.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now filetolink
+sudo systemctl status filetolink --no-pager
+```
+
+### D. Configure Nginx
+
+```bash
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/filetolink
+sudo ln -sf /etc/nginx/sites-available/filetolink /etc/nginx/sites-enabled/filetolink
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### E. Add HTTPS (Let’s Encrypt)
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d files.example.com
+```
+
+After HTTPS is active, set:
+- `BASE_URL=https://files.example.com`
+
+---
+
+## 📡 API reference
+
+### `GET /health`
+Returns service health.
+
+### `GET /d/{token}`
+Download endpoint. Supports `Range` headers.
+
+### `GET /s/{token}`
+Streaming endpoint (audio/video mime types only).
+
+### Common errors
+- `400`: `/s/{token}` used for non-streamable MIME
+- `404`: token not found or expired
+- `416`: invalid range request
+
+---
+
+## 🛠️ Operations guide
+
+- Use PostgreSQL for multi-instance production workloads.
+- Keep `BASE_URL` aligned with your public domain.
+- Use HTTPS only in production.
+- Set `FILE_EXPIRY_HOURS` based on your retention policy.
+- Monitor memory, egress bandwidth, and Telegram fetch latency.
+
+---
+
+## 🧯 Troubleshooting
+
+### Bot is running but links do not work
+
+- Confirm `BASE_URL` is publicly reachable.
+- Check reverse proxy is forwarding to app port `8000`.
+- Ensure firewall/security group allows 80/443.
+
+### `404` for existing links
+
+- Token may be expired (`FILE_EXPIRY_HOURS`).
+- DB may have been reset (common with ephemeral containers).
+
+### Streaming fails in browser
+
+- Use `/s/{token}` only for audio/video MIME.
+- Verify proxy allows range requests and large responses.
+
+### Service fails after reboot
+
+- Confirm systemd was enabled:
+  ```bash
+  sudo systemctl is-enabled filetolink
+  ```
+- Check boot logs:
+  ```bash
+  journalctl -u filetolink -b --no-pager
+  ```
+
+---
+
+## 📁 Project structure
 
 ```text
 .
@@ -64,123 +328,15 @@ This means:
 
 ---
 
-## 5) Environment variables
+## 🗺️ Roadmap ideas
 
-Copy `.env.example` to `.env` and set values:
-
-| Variable | Required | Description |
-|---|---:|---|
-| `BOT_TOKEN` | Yes | Telegram bot token from BotFather |
-| `API_ID` | Yes | Telegram API ID |
-| `API_HASH` | Yes | Telegram API hash |
-| `BASE_URL` | Yes | Public HTTPS base URL, e.g. `https://files.example.com` |
-| `PORT` | No | App port (default: `8000`) |
-| `DATABASE_URL` | No | SQLAlchemy async URL (default SQLite local file) |
-| `FILE_EXPIRY_HOURS` | No | Link validity window (default: `24`) |
-| `MAX_FILE_SIZE` | No | Max accepted upload bytes (default: `2147483648`) |
-| `OWNER_ID` | No | Optional owner user ID |
-| `FORCE_DOWNLOAD` | No | If `true`, sets attachment header |
+- Admin panel for link analytics
+- Signed URL mode with HMAC
+- Optional S3 cache layer
+- Separate worker process for bot/web split
 
 ---
 
-## 6) Local development
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-Health check:
-
-```bash
-curl -i http://127.0.0.1:8000/health
-```
-
----
-
-## 7) Production deployment guide (recommended)
-
-### Option A: VPS + systemd + Nginx
-
-1. Install prerequisites:
-```bash
-sudo apt update
-sudo apt install -y python3.11-venv nginx git
-```
-2. Clone into `/opt/filetolink`.
-3. Create virtualenv + install dependencies.
-4. Create `/opt/filetolink/.env`.
-5. Install service:
-```bash
-sudo cp deploy/filetolink.service /etc/systemd/system/filetolink.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now filetolink
-```
-6. Configure Nginx from `deploy/nginx.conf` and reload:
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-7. Add TLS (Let's Encrypt/certbot).
-
-### Option B: Docker
-
-```bash
-docker compose up --build -d
-```
-
----
-
-## 8) API reference
-
-### `GET /health`
-Returns service health.
-
-### `GET /d/{token}`
-Download endpoint. Supports `Range`.
-
-### `GET /s/{token}`
-Streaming endpoint for audio/video MIME types only.
-
-**Common errors**
-- `404`: token missing or expired.
-- `400`: `/s/` used for non-streamable MIME.
-- `416`: invalid range request.
-
----
-
-## 9) Operational recommendations
-
-- Prefer **PostgreSQL** over SQLite in multi-instance deployments.
-- Use HTTPS only; never expose plain HTTP publicly.
-- Set realistic `FILE_EXPIRY_HOURS` for your threat model.
-- Keep `BASE_URL` aligned with your external domain.
-- Monitor memory and outbound bandwidth (Telegram streaming heavy workloads).
-
----
-
-## 10) Known limitations
-
-- Availability and speed depend on Telegram fetch latency.
-- Very high concurrency benefits from horizontal scaling and tuned DB.
-- Bot and API run in same process by default; split if needed for very large workloads.
-
----
-
-## 11) Pre-deploy checklist
-
-- [ ] `.env` exists with real credentials.
-- [ ] `BASE_URL` points to your public HTTPS domain.
-- [ ] DB URL is persistent for production.
-- [ ] Reverse proxy configured for large/streaming responses.
-- [ ] Service manager enabled (`systemd`/container restart policy).
-- [ ] Health endpoint reachable.
-
----
-
-## 12) License
+## 📄 License
 
 MIT License. See `LICENSE`.
