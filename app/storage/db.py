@@ -40,7 +40,12 @@ async def save_file(record: FileRecord) -> None:
 
 async def get_file(token: str) -> FileRecord | None:
     async with SessionLocal() as session:
-        result = await session.execute(select(FileRecord).where(FileRecord.token == token))
+        result = await session.execute(
+            select(FileRecord).where(
+                FileRecord.token == token,
+                FileRecord.expires_at > datetime.now(UTC),
+            )
+        )
         return result.scalar_one_or_none()
 
 

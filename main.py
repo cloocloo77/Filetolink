@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -41,8 +40,4 @@ app.include_router(router)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == 'bot':
-        asyncio.run(bot_client.start())
-        asyncio.get_event_loop().run_forever()
-    else:
-        uvicorn.run('main:app', host='0.0.0.0', port=settings.port, reload=False)
+    uvicorn.run('main:app', host='0.0.0.0', port=settings.port, reload=False)
